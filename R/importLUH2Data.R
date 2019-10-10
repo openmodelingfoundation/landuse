@@ -19,6 +19,13 @@ library(curl)
 # 6 were released on Dec 21, 2017. Two additional data sets (RCP1.9 SSP1, RCP3.4OS SSP5) were released on Nov 29, 2018.
 # The file names are contained in the fileChoices variable.
 
+# check to see if project directory has correct subdirectories. These are contained in defaultDirList.
+defaultDirList <- c("R", "data", "data-raw", "references", "graphics", "results")
+# Code below assumes these directories are available
+# create any directories in the defaultDirList that do not alreay exist
+for (i in defaultDirList) {
+if (!dir.exists(i)) dir.create(i)
+}
 #url at U of Maryland
 baseURL <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f/"
 fileChoices <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp119-2-1-f_gn_2015-2100.nc",
@@ -30,17 +37,20 @@ fileChoices <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_Scenario
                  "AIM/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-AIM-ssp370-2-1-f_gn_2015-2100.nc",
                  "MAGPIE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp585-2-1-f_gn_2015-2100.nc")
 
-# remove the directory in the fileChoices names
+# remove the subdirectory names in the fileChoices names
 outfileNames <- gsub(".*/", "", fileChoices)
 readmefile <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f_README_v6.pdf"
-outreadmefile <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f_README_v6.pdf"
+outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
 
 destDir <- paste0(getwd(), "/data-raw/")
-for (i in fileChoices) {
-  url <- paste0(baseURL, i)
-  destfile <- paste0(destDir, i)
+for (i in 1:length(fileChoices)) {
+  url <- paste0(baseURL, fileChoices[i])
+  destfile <- paste0(destDir, outfileNames[i])
   curl_download(url, destfile)
 }
+
+curl_download(readmefile, destfile = outreadmefile)
+
 temp <- paste0("data-raw/", states_ssp585)
 ncin <- ncdf4::nc_open(temp)
 # list variable names in ncin
