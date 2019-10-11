@@ -7,7 +7,7 @@ plot(wrld_simpl,add = TRUE)
 library(moveVis)
 library(move)
 library(data.table)
-library(RCurl)
+# library(RCurl)
 library(curl)
 
 #Introduction
@@ -46,10 +46,10 @@ destDir <- paste0(getwd(), "/data-raw/")
 for (i in 1:length(fileChoices)) {
   url <- paste0(baseURL, fileChoices[i])
   destfile <- paste0(destDir, outfileNames[i])
-  curl_download(url, destfile)
+  if (!file.exists(destfile)) curl_download(url, destfile)
 }
 
-curl_download(readmefile, destfile = outreadmefile)
+if (!file.exists(outreadmefile)) curl_download(readmefile, destfile = outreadmefile)
 
 temp <- paste0("data-raw/", states_ssp585)
 ncin <- ncdf4::nc_open(temp)
