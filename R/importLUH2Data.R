@@ -24,7 +24,7 @@ defaultDirList <- c("R", "data", "data-raw", "references", "graphics", "results"
 # Code below assumes these directories are available
 # create any directories in the defaultDirList that do not alreay exist
 for (i in defaultDirList) {
-if (!dir.exists(i)) dir.create(i)
+  if (!dir.exists(i)) dir.create(i)
 }
 #url at U of Maryland
 baseURL <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f/"
@@ -39,30 +39,43 @@ fileChoices <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_Scenario
 
 # remove the subdirectory names in the fileChoices names
 outfileNames <- gsub(".*/", "", fileChoices)
+
 readmefile <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f_README_v6.pdf"
 outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
 
 destDir <- paste0(getwd(), "/data-raw/")
+
+# download files if they haven't already been downloaded
 for (i in 1:length(fileChoices)) {
   url <- paste0(baseURL, fileChoices[i])
   destfile <- paste0(destDir, outfileNames[i])
   if (!file.exists(destfile)) curl_download(url, destfile)
 }
-
 if (!file.exists(outreadmefile)) curl_download(readmefile, destfile = outreadmefile)
 
-temp <- paste0("data-raw/", states_ssp585)
-ncin <- ncdf4::nc_open(temp)
-# list variable names in ncin
-names(ncin[['var']])
-# print number of years in ncin
-ncin$dim$time$len
-
-# print start year
-ncin$dim$time$units
-
-# get the long name of variable primf
-ncin[["var"]][["primf"]][["longname"]]
+# display some useful information
+for (i in 1:length(outfileNames)) {
+  temp <- paste0("data-raw/", outfileNames[i])
+  ncin <- ncdf4::nc_open(temp)
+  # list variable names in ncin
+  varNames <- names(ncin[['var']])
+  print(varNames)
+  # print number of years in ncin
+  ncin$dim$time$len
+  
+  # print start year
+  ncin$dim$time$units
+  
+  # get the long names of variables and create a data table with short and long names
+  dt.names <- data.table(shortName = character(), longname = character())
+  for (j in 1:length(varNames)) {
+    tmp <- ncin[["var"]][[varNames[j]]][["longname"]]
+    dt.names <- rbind(dt.names, list(varNames[j], tmp))
+  }
+  filename.names <- paste0("data/varNames.", outfileNames[i], ".csv")
+  write.csv(dt.names, filename.names, row.names = FALSE)
+  
+}
 ncin.1 <- raster(temp, varname = "primf")
 ncin.brick <- brick(temp, varname = "primf")
 ncin.stack <- stack(temp, varname = "primf")
@@ -79,7 +92,7 @@ plotTitle <- gsub("\\.", " ", ncin.stack@title)
 
 # capitalize the first word
 plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
-      
+
 plot(oneYear, main = plotTitle, xlab = "long", ylab = "lat")
 raster::animate(ncin.stack, main = ncin.stack@title, zlim = -90:90)
 
