@@ -169,26 +169,21 @@ spdf <- as(yearToPlot, "SpatialPixelsDataFrame")
 mydf <- as.data.frame(spdf)
 colnames(mydf) <- c("value", "x", "y")
 
-p <- sequential_hcl(7)
-
 p <- sequential_hcl(n = 7, h = 260, c = 80, l = c(30, 90), power = 1.5,
-               gamma = NULL, fixup = TRUE, alpha = 1, palette = "Green-Yellow",
-               rev = FALSE)
+               gamma = NULL, fixup = TRUE, alpha = 1, palette = "Green-Yello",
+               rev = TRUE)
 
-
+p <- sequential_hcl(n = 7, palette = "Green-Yellow",
+                    rev = TRUE)
 
 legendText <- "Share of land area"
-plotTitle <-  ncin.stack@title
-plotTitle <- gsub("\\.", " ", ncin.stack@title)
+plotTitle <-  ncin.brick@title
+plotTitle <- gsub("\\.", " ", plotTitle)
 plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
-plotTitle <- paste0(content, ", ", plotTitle, ", ", yearToDisplay)
+plotTitle <- paste0(plotTitle, ", ", yearToDisplay, ", ", content)
 
 gg <- ggplot()
 gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
-  # coord_sf(crs = st_crs(brick.crs),
-  #          xlim = st_bbox(polys_sf)[c(1,3)],
-  #          ylim = st_bbox(polys_sf)[c(2,4)]
-# gg <-  gg + geom_map(data = world, map = world, aes(x = long, y = lat, map_id = id), fill = "white", color = "black")
 gg <- gg + ggthemes::theme_map()
 gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
 gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
@@ -200,27 +195,24 @@ gg <- gg + labs(title = plotTitle)
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
 
 
+# animate
+gg <- ggplot()
+gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
+gg <- gg + ggthemes::theme_map()
+gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
+gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
+                                na.value = "grey50",
+                                guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
+gg <- gg + theme(legend.position = "right")
+gg <- gg + labs(title = plotTitle)
+#center the title
+gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+
+# animation code starts here
+gg <- gg + transition_time(year) + labs(title = "Year: {frame_time}")
+gg <- gg + view_follow(fixed_y = TRUE)
 
 
 
-# outdir <- "graphics"
-# rasterOptions(tmpdir = outdir)
-#plot years 1:10
-raster::plot(ncin.stack, 1:5, main = ncin.stack@title, xlab = "long", ylab = "lat", ylim = c(-100, 100))
-
-# extract the 15th year from ncin.stack
-singleYear <- 15
-oneYear <- subset(ncin.stack, subset = 15)
-plotTitle <-  ncin.stack@title
-plotTitle <- gsub("\\.", " ", ncin.stack@title)
-
-# capitalize the first word
-plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
-
-plot(oneYear, main = plotTitle, xlab = "long", ylab = "lat")
-raster::animate(ncin.stack, main = ncin.stack@title)
-
-saveGIF(animate(ncin.stack, main = ncin.stack@title), movie.name = "animation.gif")
-saveGIF(animate(oneYear, main = ncin.stack@title), movie.name = "animation2.gif")
 
 
