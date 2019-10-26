@@ -3,21 +3,18 @@ library(raster)
 library(maps)
 library(maptools)
 library(rgeos)
-library(moveVis)
-library(move)
+library(sp)
+library(sf)
+# library(moveVis)
+# library(move)
 library(data.table)
-# library(RCurl)
 library(curl)
 library(rasterVis)
 library(rgdal)
-library(animation)
+#library(animation)
 library(gganimate)
 library(magick)
-library(lattice)
-#library(chron)
-#library(grDevices)
-library(sp)
-library(sf)
+#library(lattice)
 library("colorspace")
 
 # much of the processing code is taken from http://geog.uoregon.edu/bartlein/courses/geog490/week04-netCDF.html
@@ -67,7 +64,7 @@ readmefile <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f_README_v6.pdf"
 outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
 
 destDir <- paste0(getwd(), "/data-raw/")
-destDirFiles <- list.files(destDir) # might better than file.exists below
+destDirFiles <- list.files(destDir) # might be better than file.exists below
 # download files if they haven't already been downloaded
 for (i in 1:length(fileChoices)) {
   url <- paste0(baseURL, fileChoices[i])
@@ -100,9 +97,9 @@ for (i in 1:length(outfileNames)) {
   write.csv(dt.names, filename.names, row.names = FALSE)
 }
 
-# do some crunching on one of the variables  - primf from the first of the netcdf files - change varToGet for other variables
+# do some crunching on one of the variables  - c3ann from the first of the netcdf files - change varToGet for other variables
 fileNumber <- 1
-varToGet <- "primf"
+varToGet <- "c3ann"
 temp <- paste0("data-raw/", outfileNames[fileNumber])
 ncin <- ncdf4::nc_open(temp)
 content <- fileContent[fileNumber]
@@ -161,31 +158,35 @@ world <- readRDS("data-raw/worldMap.RDS") # has a latlong projection. This can b
 # an alternative
 borders <- sf::st_as_sf(map('world', plot = FALSE, fill = TRUE))
 
+# prepare a data frame from the raster brick version of the netcdf data
+
+mydf.complete <- purrr::map_dfr(
+  as.list(ncin.brick), 
+  ~setNames(as.data.table(as(., "SpatialPixelsDataFrame")), c('value', 'x', 'y')), 
+  .id = 'year'
+)
+mydf.complete[, year :=  as.numeric(year)]
+
+# pull out one year of the data for plotting
 yearToDisplay <- 2040
 # convert to netCDF year numbers
-x = yearToDisplay - tyear - 1
-yearToPlot <- ncin.brick[[x]]
-spdf <- as(yearToPlot, "SpatialPixelsDataFrame")
-mydf <- as.data.frame(spdf)
-colnames(mydf) <- c("value", "x", "y")
+yearNum = yearToDisplay - tyear - 1
+mydf.oneyear <- mydf.complete[year %in% yearNum]
 
-p <- sequential_hcl(n = 7, h = 260, c = 80, l = c(30, 90), power = 1.5,
-               gamma = NULL, fixup = TRUE, alpha = 1, palette = "Green-Yello",
-               rev = TRUE)
-
+# get 7 color palatte
 p <- sequential_hcl(n = 7, palette = "Green-Yellow",
                     rev = TRUE)
 
-legendText <- "Share of land area"
+legendText <- dt.names[shortName %in% varToGet, longName]
 plotTitle <-  ncin.brick@title
 plotTitle <- gsub("\\.", " ", plotTitle)
 plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
 plotTitle <- paste0(plotTitle, ", ", yearToDisplay, ", ", content)
 
 gg <- ggplot()
-gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
+gg <- gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
 gg <- gg + ggthemes::theme_map()
-gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
+gg <- gg + geom_tile(data = mydf.oneyear, aes(x = x, y = y, fill = value), alpha = 0.4)
 gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
                                 na.value = "grey50",
                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
@@ -195,24 +196,39 @@ gg <- gg + labs(title = plotTitle)
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
 
 
-# animate
-gg <- ggplot()
-gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
-gg <- gg + ggthemes::theme_map()
-gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
+# # animate
+# gg <- ggplot()
+# gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
+# gg <- gg + ggthemes::theme_map()
+# gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
+# gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
+#                                 na.value = "grey50",
+#                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
+# gg <- gg + theme(legend.position = "right")
+# gg <- gg + labs(title = plotTitle)
+# #center the title
+# gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+
+# # animation code starts here
+# gg <- gg + transition_time(year) + labs(title = "Year: {frame_time}")
+# gg <- gg + view_follow(fixed_y = TRUE)
+
+# animation efforts
+
+# reduce number years to 5 to speed up testing
+
+yearsTodisplay <- c(1,2,3,4,5)
+mydf.multiYears <- mydf.complete[year %in% yearsTodisplay]
+
+gg <- ggplot(mydf.multiYears, aes(x = x, y = y, fill = value) +
+  geom_sf(data = borders, color = "black", inherit.aes = FALSE) +
+  geom_tile())
 gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
                                 na.value = "grey50",
                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
-gg <- gg + theme(legend.position = "right")
-gg <- gg + labs(title = plotTitle)
-#center the title
-gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+gg <- gg + ggthemes::theme_map()
 
-# animation code starts here
-gg <- gg + transition_time(year) + labs(title = "Year: {frame_time}")
-gg <- gg + view_follow(fixed_y = TRUE)
+gganim <- gg + gganimate::transition_time(year) # + labs(title = "Year: {frame_time}")
 
-
-
-
+gganim
 
