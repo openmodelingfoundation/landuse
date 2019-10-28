@@ -126,21 +126,6 @@ time <- ncvar_get(ncin,"time")
 tunits <- ncatt_get(ncin,"time","units")
 nt <- dim(time)
 
-# next few line are experimental, so commented out for now
-# ncin.1 <- raster(temp, varname = varToGet)
-# array_var1 <- ncvar_get(ncin,varToGet)
-# dlname <- ncatt_get(ncin,varToGet, "long_name")
-# dunits <- ncatt_get(ncin,varToGet, "units")
-# fillvalue <- ncatt_get(ncin,varToGet, "_FillValue")
-# dim(array_var1)
-# if there are missing values, fill with NAs
-# array_var1[array_var1 == fillvalue$value] <- NA
-# Total number of non-missing (i.e. land, except for Antarctica) grid cells 
-# length(na.omit(as.vector(array_var1[,,1])))
-# get a single year
-# m <- 1
-# slice_var1 <- array_var1[,,m]
-
 ncin.brick <- brick(temp, varname = varToGet) # because there is no explicit projection info in the netcdf files, this is assumed - +proj=longlat +datum=WGS84"
 brick.crs <- crs(ncin.brick)
 # Close the netCDF file, flushes unwritten data to the disk
@@ -158,8 +143,8 @@ world <- readRDS("data-raw/worldMap.RDS") # has a latlong projection. This can b
 # an alternative
 borders <- sf::st_as_sf(map('world', plot = FALSE, fill = TRUE))
 
-# prepare a data frame from the raster brick version of the netcdf data
-
+# prepare a data frame from the raster brick version of the netcdf data. This can be used in ggplot which requires a data frame for it's data input
+# I use data.table because it is a data frame and I like the syntax for manipulating it.
 mydf.complete <- purrr::map_dfr(
   as.list(ncin.brick), 
   ~setNames(as.data.table(as(., "SpatialPixelsDataFrame")), c('value', 'x', 'y')), 
@@ -173,8 +158,14 @@ yearToDisplay <- 2040
 yearNum = yearToDisplay - tyear - 1
 mydf.oneyear <- mydf.complete[year %in% yearNum]
 
+# the plot command is a quick way to see what you have
+
+plot(mydf.oneyear)
+
+# using ggplot gives more control over what gets plotted
+
 # get 7 color palatte
-p <- sequential_hcl(n = 7, palette = "Green-Yellow",
+p <- colorspace::sequential_hcl(n = 7, palette = "Green-Yellow",
                     rev = TRUE)
 
 legendText <- dt.names[shortName %in% varToGet, longName]
@@ -194,41 +185,39 @@ gg <- gg + theme(legend.position = "right")
 gg <- gg + labs(title = plotTitle)
 #center the title
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+gg
 
+# animation 
 
-# # animate
-# gg <- ggplot()
-# gg <-  gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
-# gg <- gg + ggthemes::theme_map()
-# gg <-  gg + geom_tile(data = mydf, aes(x = x, y = y, fill = value), alpha = 0.4)
-# gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
-#                                 na.value = "grey50",
-#                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
-# gg <- gg + theme(legend.position = "right")
-# gg <- gg + labs(title = plotTitle)
-# #center the title
-# gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+# reduce number of years to speed up testing
 
-# # animation code starts here
-# gg <- gg + transition_time(year) + labs(title = "Year: {frame_time}")
-# gg <- gg + view_follow(fixed_y = TRUE)
+yearsToDisplay <- c(10, 20, 30, 40, 50, 60, 70, 80)
+plotTitle <-  ncin.brick@title
+plotTitle <- gsub("\\.", " ", plotTitle)
+plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
+plotTitle <- paste0(plotTitle, " source: ", content)
 
-# animation efforts
+mydf.multiYears <- mydf.complete[year %in% yearsToDisplay]
 
-# reduce number years to 5 to speed up testing
+gg <- ggplot(mydf.multiYears, aes(x = x, y = y, fill = value))
+gg <- gg +  geom_sf(data = borders, color = "black", inherit.aes = FALSE)
+gg <- gg +  geom_tile()
 
-yearsTodisplay <- c(1,2,3,4,5)
-mydf.multiYears <- mydf.complete[year %in% yearsTodisplay]
-
-gg <- ggplot(mydf.multiYears, aes(x = x, y = y, fill = value) +
-  geom_sf(data = borders, color = "black", inherit.aes = FALSE) +
-  geom_tile())
 gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
                                 na.value = "grey50",
                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
 gg <- gg + ggthemes::theme_map()
+gg <- gg + theme(plot.title = element_text(hjust = 0.5))
 
-gganim <- gg + gganimate::transition_time(year) # + labs(title = "Year: {frame_time}")
-
+gganim <- gg + gganimate::transition_time(year) + labs(title = plotTitle, subtitle = "Year: {frame_time}")
 gganim
+
+gganimate::animate(gganim, nframes = length(yearsToDisplay), fps = 1, renderer = ffmpeg_renderer())
+gganimate::anim_save("animateOutput", animation = last_animation(), path = "graphics")
+
+# if the animation doesn't show much change, do some raster math to see what happens between the first and last year
+firstYear <- 1
+lastYear <- nlayers(ncin.brick)
+
+deltaLastMinusFirst <- ncin.brick[[lastYear]] -  ncin.brick[[firstYear]]
 
