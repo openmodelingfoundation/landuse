@@ -5,7 +5,7 @@ library(maptools)
 library(rgeos)
 library(sp)
 library(sf)
-# library(moveVis)
+ library(moveVis)
 # library(move)
 library(data.table)
 library(curl)
@@ -26,7 +26,7 @@ library("colorspace")
 # There are 8 versions of these data sets based on combinations of RCPs and SSPs. Each data set is generated
 # by a single IAM.
 # 6 were released on Dec 21, 2017. Two additional data sets (RCP1.9 SSP1, RCP3.4OS SSP5) were released on Nov 29, 2018.
-# The file names are stored in the fileChoices variable.
+# The file names are stored in the fileName variable.
 # The variable names are identical in each file - primf, primn, secdf, secdn, urban, c3ann, c4ann, c3per, c4per, 
 # c3nfx, pastr, range, secmb, secma, lat_bounds, lon_bounds, time_bnds.
 # The slightly more explanatory name for each is - forested primary land, non-forested primary land, 
@@ -34,6 +34,11 @@ library("colorspace")
 # C4 annual crops, C3 perennial crops, C4 perennial crops, C3 nitrogen-fixing crops, managed pasture, rangeland, 
 # secondary mean biomass carbon density, secondary mean age, lat_bounds, lon_bounds, time_bnds
 # The data are annual from 2015 to 2100
+
+# Please use the following citation in any presentations or publications that result from, or include, the use of the LUH2 datasets:
+#   Hurtt, G., L. Chini, R. Sahajpal, S. Frolking, et al. “Harmonization of global land-use change and management for the period 850-2100”. Geoscientific Model Development (In prep).
+# An alternative might be Ma, L., Hurtt, G. C., Chini, L. P., Sahajpal, R., Pongratz, J., Frolking, S., et al. (2019). Global Transition Rules for Translating Land-use Change (LUH2) 
+# To Land-cover Change for CMIP6 using GLM2. Geosci. Model Dev. Discuss., 1–30. doi:10.5194/gmd-2019-146.
 
 # check to see if project directory has correct subdirectories. These are contained in defaultDirList.
 defaultDirList <- c("data", "data-raw", "references", "graphics", "results")
@@ -44,7 +49,7 @@ for (i in defaultDirList) {
 }
 #url at U of Maryland
 baseURL <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f/"
-fileChoices <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp119-2-1-f_gn_2015-2100.nc",
+fileName <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp119-2-1-f_gn_2015-2100.nc",
                  "MAGPIE_SSP5_RCP34OS/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp534-2-1-f_gn_2015-2100.nc",
                  "IMAGE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp126-2-1-f_gn_2015-2100.nc",
                  "GCAM34/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-GCAM-ssp434-2-1-f_gn_2015-2100.nc",
@@ -53,12 +58,22 @@ fileChoices <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_Scenario
                  "AIM/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-AIM-ssp370-2-1-f_gn_2015-2100.nc",
                  "MAGPIE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp585-2-1-f_gn_2015-2100.nc")
 
+# these file names include the SSP and RCP combos after the model name and before f_gn. For example, ssp119 is ssp1 and rcp1.9. 
+
 # create variable for file content
-fileContent <- gsub("multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-", "", fileChoices)
+fileContent <- gsub("multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-", "", fileName)
 fileContent <- gsub(".*/", "", fileContent)
 fileContent <- gsub(".nc", "", fileContent)
-# remove the subdirectory names in the fileChoices names
-outfileNames <- gsub(".*/", "", fileChoices)
+fileContent <- gsub("-2-1-f_gn_2015-2100", "", fileContent)
+
+# get ssps and rcps
+test <- as.data.table(tstrsplit(fileContent, "-"))
+setnames(test, old = names(test), new = c("model", "ssprcpcombo"))
+test[, ssp := toupper(substr(ssprcpcombo, 1,4))][,rcp := paste0("RCP", substr(ssprcpcombo, 5,6))][, ssprcpcombo := NULL]
+fileInfo <- cbind(test, fileName)
+
+# remove the subdirectory names in the fileName names
+fileInfo[, outfileName := gsub(".*/", "", fileName)]
 
 readmefile <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f_README_v6.pdf"
 outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
@@ -66,43 +81,42 @@ outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
 destDir <- paste0(getwd(), "/data-raw/")
 destDirFiles <- list.files(destDir) # might be better than file.exists below
 # download files if they haven't already been downloaded
-for (i in 1:length(fileChoices)) {
-  url <- paste0(baseURL, fileChoices[i])
-  destfile <- paste0(destDir, outfileNames[i])
+for (i in 1:length(fileInfo)) {
+  url <- paste0(baseURL, fileInfo$fileName[i])
+  destfile <- paste0(destDir, fileInfo$outfileName[i])
   if (!file.exists(destfile)) curl_download(url, destfile)
 }
 if (!file.exists(outreadmefile)) curl_download(readmefile, destfile = outreadmefile)
 
 # display some useful information. It is identical for all these files but I'll leave the code in for now with the print statements commented out
-for (i in 1:length(outfileNames)) {
-#  print(paste0("Reporting on: ", outfileNames[i]))
-  temp <- paste0("data-raw/", outfileNames[i])
+for (i in 1:length(fileInfo)) {
+  temp <- paste0("data-raw/", fileInfo$outfileName[i])
   ncin <- ncdf4::nc_open(temp)
   # list variable names in ncin
   varNames <- names(ncin[['var']])
-#  print(varNames)
-  # print number of years in ncin
   ncin$dim$time$len
   
   # print start year
   ncin$dim$time$units
   
   # get the long names of variables and create a data table with short and long names
-  dt.names <- data.table(shortName = character(), longName = character())
+  dt.varNames <- data.table(shortName = character(), longName = character())
   for (j in 1:length(varNames)) {
     tmp <- ncin[["var"]][[varNames[j]]][["longname"]]
-    dt.names <- rbind(dt.names, list(varNames[j], tmp))
+    dt.varNames <- rbind(dt.varNames, list(varNames[j], tmp))
   }
-  filename.names <- paste0("data/varNames.", outfileNames[i], ".csv")
-  write.csv(dt.names, filename.names, row.names = FALSE)
+  filename.names <- paste0("data/varNames.", fileInfo$outfileName[i], ".csv")
+  write.csv(dt.varNames, filename.names, row.names = FALSE)
 }
 
 # do some crunching on one of the variables  - c3ann from the first of the netcdf files - change varToGet for other variables
-fileNumber <- 1
+fileNumber <- 8
 varToGet <- "c3ann"
-temp <- paste0("data-raw/", outfileNames[fileNumber])
+temp <- paste0("data-raw/", fileInfo$outfileName[fileNumber])
 ncin <- ncdf4::nc_open(temp)
-content <- fileContent[fileNumber]
+model <- fileInfo[fileName %in% fileName[fileNumber], model]
+ssp <- fileInfo[fileName %in% fileName[fileNumber], ssp]
+rcp <- fileInfo[fileName %in% fileName[fileNumber], rcp]
 
 # get global attributes
 title <- ncatt_get(ncin, 0, "title")
@@ -114,18 +128,20 @@ Conventions <- ncatt_get(ncin,0,"Conventions")
 
 # create some variables used for processing below
 # get longitude and latitude
-lon <- ncvar_get(ncin,"lon")
-nlon <- dim(lon)
-lat <- ncvar_get(ncin,"lat")
-nlat <- dim(lat)
-latunits <- ncatt_get(ncin,"lat","units")$value # should always be "degrees_north"
-lonunits <- ncatt_get(ncin,"lon","units")$value # should always be "degrees_east"
+# not currently used so commented out
+# lon <- ncvar_get(ncin,"lon")
+# nlon <- dim(lon)
+# lat <- ncvar_get(ncin,"lat")
+# nlat <- dim(lat)
+# latunits <- ncatt_get(ncin,"lat","units")$value # should always be "degrees_north"
+# lonunits <- ncatt_get(ncin,"lon","units")$value # should always be "degrees_east"
 
 # get time
 time <- ncvar_get(ncin,"time")
 tunits <- ncatt_get(ncin,"time","units")
 nt <- dim(time)
 
+# get raster version of the data for a particular variable. This makes it easy to do raster math on the data.
 ncin.brick <- brick(temp, varname = varToGet) # because there is no explicit projection info in the netcdf files, this is assumed - +proj=longlat +datum=WGS84"
 brick.crs <- crs(ncin.brick)
 # Close the netCDF file, flushes unwritten data to the disk
@@ -136,43 +152,46 @@ tustr <- strsplit(tunits$value, " ")
 tdstr <- strsplit(unlist(tustr)[3], "-")
 tmonth <- as.integer(unlist(tdstr)[2])
 tday <- as.integer(unlist(tdstr)[3])
-tyear <- as.integer(unlist(tdstr)[1])
+tyear <- as.integer(unlist(tdstr)[1]) # starting year
 
-# do a nice looking graph of year x between 2015 and 2100
+# get a map of country borders
 world <- readRDS("data-raw/worldMap.RDS") # has a latlong projection. This can be changed in the functions.R code.
 # an alternative
 borders <- sf::st_as_sf(map('world', plot = FALSE, fill = TRUE))
 
-# prepare a data frame from the raster brick version of the netcdf data. This can be used in ggplot which requires a data frame for it's data input
+# prepare a data frame from the raster brick version of the netcdf data. This can be used in ggplot which requires a data frame for its data input
 # I use data.table because it is a data frame and I like the syntax for manipulating it.
 mydf.complete <- purrr::map_dfr(
   as.list(ncin.brick), 
   ~setNames(as.data.table(as(., "SpatialPixelsDataFrame")), c('value', 'x', 'y')), 
   .id = 'year'
 )
-mydf.complete[, year :=  as.numeric(year)]
+mydf.complete[, year := as.numeric(year)]
 
-# pull out one year of the data for plotting
-yearToDisplay <- 2040
-# convert to netCDF year numbers
-yearNum = yearToDisplay - tyear - 1
-mydf.oneyear <- mydf.complete[year %in% yearNum]
 
-# the plot command is a quick way to see what you have
-
-plot(mydf.oneyear)
-
-# using ggplot gives more control over what gets plotted
 
 # get 7 color palatte
 p <- colorspace::sequential_hcl(n = 7, palette = "Green-Yellow",
                     rev = TRUE)
 
-legendText <- dt.names[shortName %in% varToGet, longName]
+legendText <- "fraction of grid cell"
 plotTitle <-  ncin.brick@title
 plotTitle <- gsub("\\.", " ", plotTitle)
 plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
-plotTitle <- paste0(plotTitle, ", ", yearToDisplay, ", ", content)
+plotTitle <- paste0(plotTitle, ", ", rcp, ", ", ssp, ", Model: ", model)
+
+# the raster::plot command is a quick way to see what you have
+yearVal = 2100
+yearVal.converted = yearVal -  tyear - 1
+plotTitle.oneYear <- paste0(plotTitle, ", Year: ", yearVal)
+raster::plot(ncin.brick[[yearVal.converted]], main = plotTitle.oneYear)
+
+# using ggplot gives more control over what gets plotted but can be slow. It requires a data.frame
+# pull out one year of the data for plotting
+# convert to netCDF year numbers
+yearNum = yearVal - tyear - 1
+mydf.oneyear <- mydf.complete[year %in% yearNum]
+
 
 gg <- ggplot()
 gg <- gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
@@ -182,35 +201,34 @@ gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
                                 na.value = "grey50",
                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
 gg <- gg + theme(legend.position = "right")
-gg <- gg + labs(title = plotTitle)
-#center the title
-gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+gg <- gg + labs(title = plotTitle.oneYear)
+gg <- gg + theme(plot.title = element_text(hjust = 0.5)) #center the title
 gg
 
-# animation 
+# Three (or more) approaches animation 
+
+# First, use ggplot. It needs a data frame.
 
 # reduce number of years to speed up testing
 
 yearsToDisplay <- c(10, 20, 30, 40, 50, 60, 70, 80)
-plotTitle <-  ncin.brick@title
-plotTitle <- gsub("\\.", " ", plotTitle)
-plotTitle <- paste0(toupper(substr(plotTitle, 1, 1)), substr(plotTitle, 2, nchar((plotTitle))))
-plotTitle <- paste0(plotTitle, " source: ", content)
 
 mydf.multiYears <- mydf.complete[year %in% yearsToDisplay]
 
 gg <- ggplot(mydf.multiYears, aes(x = x, y = y, fill = value))
 gg <- gg +  geom_sf(data = borders, color = "black", inherit.aes = FALSE)
 gg <- gg +  geom_tile()
+gg <- gg + scale_fill_viridis_c()
 
-gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
-                                na.value = "grey50",
-                                guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
+# gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
+#                                 na.value = "grey50",
+#                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
 gg <- gg + ggthemes::theme_map()
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
 
 gganim <- gg + gganimate::transition_time(year) + labs(title = plotTitle, subtitle = "Year: {frame_time}")
-gganim
+#image <- gganimate::animate(gganim)
+
 
 gganimate::animate(gganim, nframes = length(yearsToDisplay), fps = 1, renderer = ffmpeg_renderer())
 gganimate::anim_save("animateOutput", animation = last_animation(), path = "graphics")
@@ -220,4 +238,35 @@ firstYear <- 1
 lastYear <- nlayers(ncin.brick)
 
 deltaLastMinusFirst <- ncin.brick[[lastYear]] -  ncin.brick[[firstYear]]
+
+# some experiments with tmap for animations
+# Source of info is https://cran.r-project.org/web/packages/tmap/vignettes/tmap-getstarted.html
+library(tmap)
+data("World")
+# set some tmap session options
+tmap_options(max.raster = c(plot = 1036800, view = 1036800))
+tmap_mode("view") #use "view" for interactive maps; "plot" for static maps
+
+#plot one year with tmap, the first year X0
+tmMap <- tm_shape(ncin.brick) + tm_raster("X0", palette = terrain.colors(10, rev = TRUE)) +
+  tm_shape(World) +
+  tm_borders("white", lwd = .5) +
+  tm_text("iso_a3", size = .5)  + tm_view(text.size.variable = TRUE)
+
+tmMap
+
+library(animation)
+animation::saveGIF({
+  for (m in 1:nlayers(ncin.brick)) { 
+    raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + 2014) )       # min, max of the legend
+#    plot(countries, add=T)
+  }
+}, movie.name = "animationSaveGIF.gif", img.name = "Rplot", convert = "magick")
+
+animation::saveVideo({
+  for (m in 1:nlayers(ncin.brick)) {        
+    plot(ncin.brick[[m]])  
+  }
+}, video.name = "animationSavemovie.mp4", img.name = "Rplot", 
+ffmpeg = ani.options("ffmpeg"))
 
