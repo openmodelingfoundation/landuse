@@ -168,10 +168,8 @@ mydf.complete <- purrr::map_dfr(
 )
 mydf.complete[, year := as.numeric(year)]
 
-
-
 # get 7 color palatte
-p <- colorspace::sequential_hcl(n = 7, palette = "Green-Yellow",
+p <- colorspace::sequential_hcl(n = 7, palette = "Terrain 2",
                     rev = TRUE)
 
 legendText <- "fraction of grid cell"
@@ -184,14 +182,13 @@ plotTitle <- paste0(plotTitle, ", ", rcp, ", ", ssp, ", Model: ", model)
 yearVal = 2100
 yearVal.converted = yearVal -  tyear - 1
 plotTitle.oneYear <- paste0(plotTitle, ", Year: ", yearVal)
-raster::plot(ncin.brick[[yearVal.converted]], main = plotTitle.oneYear)
+raster::plot(ncin.brick[[yearVal.converted]], main = plotTitle.oneYear, col = p)
 
 # using ggplot gives more control over what gets plotted but can be slow. It requires a data.frame
 # pull out one year of the data for plotting
 # convert to netCDF year numbers
 yearNum = yearVal - tyear - 1
 mydf.oneyear <- mydf.complete[year %in% yearNum]
-
 
 gg <- ggplot()
 gg <- gg + geom_sf(data = borders, fill = "transparent", color = "black") # +
@@ -203,35 +200,34 @@ gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
 gg <- gg + theme(legend.position = "right")
 gg <- gg + labs(title = plotTitle.oneYear)
 gg <- gg + theme(plot.title = element_text(hjust = 0.5)) #center the title
-gg
+print(gg)
 
-# Three (or more) approaches animation 
+# Three (or more) approaches to animation - using gganimate, tmap, and animate's saveGIF and saveMovie
 
-# First, use ggplot. It needs a data frame.
+# gganimate - works with ggplot.
 
 # reduce number of years to speed up testing
 
 yearsToDisplay <- c(10, 20, 30, 40, 50, 60, 70, 80)
 
 mydf.multiYears <- mydf.complete[year %in% yearsToDisplay]
-
+# convert relative years to absolute years
+mydf.multiYears[, year := year + tyear - 1]
 gg <- ggplot(mydf.multiYears, aes(x = x, y = y, fill = value))
 gg <- gg +  geom_sf(data = borders, color = "black", inherit.aes = FALSE)
 gg <- gg +  geom_tile()
-gg <- gg + scale_fill_viridis_c()
 
-# gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
-#                                 na.value = "grey50",
-#                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
+gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
+                                na.value = "grey50",
+                                guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
 gg <- gg + ggthemes::theme_map()
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
 
 gganim <- gg + gganimate::transition_time(year) + labs(title = plotTitle, subtitle = "Year: {frame_time}")
 #image <- gganimate::animate(gganim)
 
-
-gganimate::animate(gganim, nframes = length(yearsToDisplay), fps = 1, renderer = ffmpeg_renderer())
-gganimate::anim_save("animateOutput", animation = last_animation(), path = "graphics")
+gganimate::animate(gganim, nframes = length(yearsToDisplay), fps = 1, renderer = ffmpeg_renderer(format = "mp4"))
+gganimate::anim_save("animateOutput.mp4", animation = last_animation(), path = "graphics")
 
 # if the animation doesn't show much change, do some raster math to see what happens between the first and last year
 firstYear <- 1
@@ -245,7 +241,7 @@ library(tmap)
 data("World")
 # set some tmap session options
 tmap_options(max.raster = c(plot = 1036800, view = 1036800))
-tmap_mode("view") #use "view" for interactive maps; "plot" for static maps
+tmap_mode("plot") #use "view" for interactive maps; "plot" for static maps
 
 #plot one year with tmap, the first year X0
 tmMap <- tm_shape(ncin.brick) + tm_raster("X0", palette = terrain.colors(10, rev = TRUE)) +
@@ -255,18 +251,23 @@ tmMap <- tm_shape(ncin.brick) + tm_raster("X0", palette = terrain.colors(10, rev
 
 tmMap
 
-library(animation)
-animation::saveGIF({
-  for (m in 1:nlayers(ncin.brick)) { 
-    raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + 2014) )       # min, max of the legend
-#    plot(countries, add=T)
-  }
-}, movie.name = "animationSaveGIF.gif", img.name = "Rplot", convert = "magick")
+# animations using the animation package
 
+library(animation)
+filename <- "animationSaveGIF.gif"
+animation::saveGIF(
+  {
+  for (m in 1:nlayers(ncin.brick)) { 
+    raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + tyear - 1) )
+  }
+}, movie.name = filename, img.name = "Rplot", convert = "magick", path = "graphics")
+
+gganimate::anim_save(filename, animation = last_animation(), path = "graphics")
+
+filename <- "graphics/animationSavemovie.mp4"
 animation::saveVideo({
   for (m in 1:nlayers(ncin.brick)) {        
-    plot(ncin.brick[[m]])  
+    raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + tyear - 1) )       # min, max of the legend
   }
-}, video.name = "animationSavemovie.mp4", img.name = "Rplot", 
-ffmpeg = ani.options("ffmpeg"))
+}, video.name = filename, img.name = "Rplot", ffmpeg = ani.options("ffmpeg"))
 
