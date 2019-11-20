@@ -1,20 +1,27 @@
+# first four lines of code below are to install packages automatically for people who don't have them installed
+packageList <- installed.packages()
+neededPackages <- c("animation", "ncdf4", "raster", "rgdal", "maps", "maptools", "rgeos", "sp", "sf", "moveVis", "data.table", "curl", 
+                   "gganimate", "ggplot2", "magick", "colorspace")
+packagesToInstall <- neededPackages[!neededPackages %in% packageList]
+install.packages(packagesToInstall)
 library(ncdf4)
 library(raster)
 library(maps)
 library(maptools)
-library(rgeos)
+# library(rgeos)
 library(sp)
 library(sf)
- library(moveVis)
-# library(move)
+#  library(moveVis)
 library(data.table)
-library(curl)
-library(rasterVis)
+library(tmap)
+# library(curl)
+# library(rasterVis)
 library(rgdal)
-#library(animation)
+library(animation)
 library(gganimate)
+library(ggplot2)
 library(magick)
-#library(lattice)
+# #library(lattice)
 library("colorspace")
 
 # much of the processing code is taken from http://geog.uoregon.edu/bartlein/courses/geog490/week04-netCDF.html
@@ -50,13 +57,13 @@ for (i in defaultDirList) {
 #url at U of Maryland
 baseURL <- "http://gsweb1vh2.umd.edu/LUH2/LUH2_v2f/"
 fileName <- c("IMAGE_SSP1_RCP19/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp119-2-1-f_gn_2015-2100.nc",
-                 "MAGPIE_SSP5_RCP34OS/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp534-2-1-f_gn_2015-2100.nc",
-                 "IMAGE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp126-2-1-f_gn_2015-2100.nc",
-                 "GCAM34/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-GCAM-ssp434-2-1-f_gn_2015-2100.nc",
-                 "MESSAGE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MESSAGE-ssp245-2-1-f_gn_2015-2100.nc",
-                 "GCAM60/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-GCAM-ssp460-2-1-f_gn_2015-2100.nc",
-                 "AIM/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-AIM-ssp370-2-1-f_gn_2015-2100.nc",
-                 "MAGPIE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp585-2-1-f_gn_2015-2100.nc")
+              "MAGPIE_SSP5_RCP34OS/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp534-2-1-f_gn_2015-2100.nc",
+              "IMAGE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-IMAGE-ssp126-2-1-f_gn_2015-2100.nc",
+              "GCAM34/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-GCAM-ssp434-2-1-f_gn_2015-2100.nc",
+              "MESSAGE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MESSAGE-ssp245-2-1-f_gn_2015-2100.nc",
+              "GCAM60/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-GCAM-ssp460-2-1-f_gn_2015-2100.nc",
+              "AIM/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-AIM-ssp370-2-1-f_gn_2015-2100.nc",
+              "MAGPIE/multiple-states_input4MIPs_landState_ScenarioMIP_UofMD-MAGPIE-ssp585-2-1-f_gn_2015-2100.nc")
 
 # these file names include the SSP and RCP combos after the model name and before f_gn. For example, ssp119 is ssp1 and rcp1.9. 
 
@@ -81,9 +88,11 @@ outreadmefile <- "references/LUH2_v2f_README_v6.pdf"
 destDir <- paste0(getwd(), "/data-raw/")
 destDirFiles <- list.files(destDir) # might be better than file.exists below
 # download files if they haven't already been downloaded
-for (i in 1:length(fileInfo)) {
+
+for (i in 1:nrow(fileInfo)) {
   url <- paste0(baseURL, fileInfo$fileName[i])
   destfile <- paste0(destDir, fileInfo$outfileName[i])
+  print(destfile)
   if (!file.exists(destfile)) curl_download(url, destfile)
 }
 if (!file.exists(outreadmefile)) curl_download(readmefile, destfile = outreadmefile)
@@ -155,8 +164,6 @@ tday <- as.integer(unlist(tdstr)[3])
 tyear <- as.integer(unlist(tdstr)[1]) # starting year
 
 # get a map of country borders
-world <- readRDS("data-raw/worldMap.RDS") # has a latlong projection. This can be changed in the functions.R code.
-# an alternative
 borders <- sf::st_as_sf(map('world', plot = FALSE, fill = TRUE))
 
 # prepare a data frame from the raster brick version of the netcdf data. This can be used in ggplot which requires a data frame for its data input
@@ -170,7 +177,7 @@ mydf.complete[, year := as.numeric(year)]
 
 # get 7 color palatte
 p <- colorspace::sequential_hcl(n = 7, palette = "Terrain 2",
-                    rev = TRUE)
+                                rev = TRUE)
 
 legendText <- "fraction of grid cell"
 plotTitle <-  ncin.brick@title
@@ -222,12 +229,8 @@ gg <- gg + scale_fill_gradientn(colors = p, name = legendText,
                                 guide = "colorbar") #, values = bb, breaks = f, limits = f, labels = f, aesthetics = "fill")
 gg <- gg + ggthemes::theme_map()
 gg <- gg + theme(plot.title = element_text(hjust = 0.5))
+print(gg)
 
-gganim <- gg + gganimate::transition_time(year) + labs(title = plotTitle, subtitle = "Year: {frame_time}")
-#image <- gganimate::animate(gganim)
-
-gganimate::animate(gganim, nframes = length(yearsToDisplay), fps = 1, renderer = ffmpeg_renderer(format = "mp4"))
-gganimate::anim_save("animateOutput.mp4", animation = last_animation(), path = "graphics")
 
 # if the animation doesn't show much change, do some raster math to see what happens between the first and last year
 firstYear <- 1
@@ -237,7 +240,8 @@ deltaLastMinusFirst <- ncin.brick[[lastYear]] -  ncin.brick[[firstYear]]
 
 # some experiments with tmap for animations
 # Source of info is https://cran.r-project.org/web/packages/tmap/vignettes/tmap-getstarted.html
-library(tmap)
+
+# from tmap
 data("World")
 # set some tmap session options
 tmap_options(max.raster = c(plot = 1036800, view = 1036800))
@@ -253,16 +257,15 @@ tmMap
 
 # animations using the animation package
 
-library(animation)
 filename <- "animationSaveGIF.gif"
 animation::saveGIF(
   {
-  for (m in 1:nlayers(ncin.brick)) { 
-    raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + tyear - 1) )
-  }
-}, movie.name = filename, img.name = "Rplot", convert = "magick", path = "graphics")
+    for (m in 1:nlayers(ncin.brick)) { 
+      raster::plot(ncin.brick[[m]], main = paste0(plotTitle, ", year ", m + tyear - 1) )
+    }
+  }, movie.name = filename, img.name = "Rplot", convert = "magick", path = "graphics")
 
-gganimate::anim_save(filename, animation = last_animation(), path = "graphics")
+gganimate::anim_save(filename, animation = last_animation(), path = "graphics", renderer = gifski_renderer())
 
 filename <- "graphics/animationSavemovie.mp4"
 animation::saveVideo({
