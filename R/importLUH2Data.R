@@ -93,7 +93,14 @@ for (i in 1:nrow(fileInfo)) {
   url <- paste0(baseURL, fileInfo$fileName[i])
   destfile <- paste0(destDir, fileInfo$outfileName[i])
   print(destfile)
-  if (!file.exists(destfile)) curl_download(url, destfile)
+  if (!file.exists(destfile)) {
+    queryString <- paste0("Do you want to download ", destfile, " (y, n?")
+    choice <- readline(prompt = queryString)
+    choice <- "y" # so there will be a definite value
+    if (choice  %in% c("y", "Yes", "Y")) {
+     curl_download(url, destfile)
+    }
+  }
 }
 if (!file.exists(outreadmefile)) curl_download(readmefile, destfile = outreadmefile)
 
